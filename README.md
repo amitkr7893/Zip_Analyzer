@@ -1,76 +1,102 @@
-#File Uploader (ZIP Analyzer)
+# File Uploader (ZIP Analyzer)
 
-1. Project Overview
-This project is built to handle the challenge of uploading very large files (up to 8GB or more) without crashing the server or losing progress. I used React for the frontend, Node.js for the backend, and MySQL to keep track of every single piece of data.
-+1
+## 1. Project Overview
+This project is built to handle the challenge of uploading very large files (greater than 1GB or more) without crashing the server or losing progress. I used React for the frontend, Node.js for the backend, and MySQL to keep track of every single piece of data.
 
-2. How I Solved the Requirements
-A. Smart Chunking & Concurrency
+## 2. How I Solved the Requirements
 
-The Problem: Browsers often fail when trying to upload a single 8GB file because the connection is too long or the file is too big.
+### A. Smart Chunking & Concurrency
+The Problem:  
+Browsers often fail when trying to upload a single > 1GB file because the connection is too long or the file is too big.
 
+My Solution:  
+I used the Blob.slice() API in the frontend to split the file into 5MB chunks.
 
-My Solution: I used the Blob.slice() API in the frontend to split the file into 5MB chunks.
+Control:  
+I limited the system to 3 concurrent uploads. This means the browser only sends 3 chunks at a time, which keeps the network stable and doesn't freeze the user's computer.
 
+### B. Resumability (Pause & Resume)
+Handshake:  
+Before starting an upload, the frontend handshakes with the backend by sending a unique hash of the file.
 
-Control: I limited the system to 3 concurrent uploads. This means the browser only sends 3 chunks at a time, which keeps the network stable and doesn't freeze the user's computer.
-+1
+The Brain:  
+The backend checks the MySQL database to see if parts of the file were already uploaded.
 
-B. Resumability (Pause & Resume)
+Result:  
+If the page is refreshed or the internet connection is lost, the user can select the same file again. The UI resumes exactly where it left off and uploads only the missing chunks.
 
-Handshake: Before starting an upload, the frontend "handshakes" with the backend. It sends a unique hash of the file.
-+2
+### C. Backend Resilience & Memory Efficiency
+Streaming I/O:  
+The backend never loads the entire file into memory. It streams each 5MB chunk directly to disk using byte offsets.
 
+Integrity:  
+After all chunks are uploaded, the server computes a SHA-256 hash of the final file to ensure no data corruption occurred.
 
-The "Brain": The backend checks the MySQL database to see if we have already uploaded some parts of this file.
-+1
+Peeking:  
+The yauzl library is used to inspect the contents of the ZIP file without extracting it fully.
 
-Result: If you refresh the page or lose your internet, you can just select the same file again. The UI will show exactly where it left off (e.g., 73% or 95%) and only upload the missing parts.
+## 3. Handling Bonus Cases
+Double-Finalize:  
+MySQL GET_LOCK is used to ensure that even if two finalize requests occur simultaneously, the server processes the file only once.
 
-C. Backend Resilience & Memory Efficiency
+Network Flapping:  
+A retry mechanism with Exponential Backoff retries failed chunk uploads up to 3 times before stopping.
 
-Streaming I/O: I made sure the backend never loads the whole 8GB file into RAM. Instead, it uses Streams to write each 5MB chunk directly to the correct spot in the file using byte offsets.
-+2
+Out-of-Order Delivery:  
+Chunks can arrive in any order. Since they are written using byte offsets, the file is reconstructed correctly.
 
+## 4. How to Run This Project
 
-Integrity: Once the last chunk is in, the server calculates a SHA-256 hash of the final file to make sure no data was lost or corrupted during the move.
-+1
-
-
-Peeking: I used the yauzl library to look inside the ZIP file and list the top-level files without having to extract the whole thing to the disk.
-
-3. Handling Bonus Cases
-
-Double-Finalize: I used MySQL GET_LOCK to ensure that even if two "finish" requests come at once, the server only processes the final file once.
-
-
-Network Flapping: I implemented a retry system with Exponential Backoff. If a chunk fails (like a 500 error), it waits a bit and tries again up to 3 times before giving up.
-+2
-
-Out-of-Order Delivery: Since I write to specific positions in the file, it doesn't matter if Chunk #100 arrives before Chunk #1. The file will still be built correctly.
-
-4. How to Run This Project
-Using Docker (Recommended)
-This is the easiest way to see everything working together:
-
-Make sure you have Docker Desktop installed.
-
-Open your terminal in the project root folder.
-
+### Using Docker (Recommended)
+Install Docker Desktop.  
+Open a terminal in the project root directory.  
 Run:
-
-Bash
-docker-compose up --build
+docker-compose up --build  
 Open http://localhost:3000 in your browser.
 
-Manual Setup
-Database: Create a MySQL database named chunked_uploads and run the queries provided in the server.js comments.
+## OR
 
-Backend: Go to the backend/ folder, run npm install, then node server.js.
+### Manual Setup
+Database:  
+Create a MySQL database named chunked_uploads and run the required queries given below :
 
-Frontend: Go to the frontend/ folder, run npm install, then npm start.
+CREATE DATABASE chunked_uploads;
+USE chunked_uploads;
 
-5. Technical Trade-offs & Future Improvements
-Current Hash: I used a hash based on name, size, and date for the handshake to keep it fast. In a real production app, I would use a partial file content hash for even better security.
+```
+CREATE TABLE uploads (
+    id VARCHAR(255) PRIMARY KEY, -- This will store the fileHash
+    filename VARCHAR(255) NOT NULL,
+    total_size BIGINT NOT NULL,
+    total_chunks INT NOT NULL,
+    status ENUM('UPLOADING', 'PROCESSING', 'COMPLETED', 'FAILED') DEFAULT 'UPLOADING',
+    final_hash VARCHAR(64),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
-Future Enhancement: I would add a "Pause" button to let the user stop the upload manually whenever they want, though the automatic resume currently handles page refreshes perfectly.
+CREATE TABLE chunks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    upload_id VARCHAR(255),
+    chunk_index INT NOT NULL,
+    status ENUM('PENDING', 'UPLOADED') DEFAULT 'PENDING',
+    received_at TIMESTAMP NULL,
+    FOREIGN KEY (upload_id) REFERENCES uploads(id)
+);
+
+SELECT * FROM uploads;
+SELECT * from chunks;
+SELECT * FROM chunks WHERE status = 'UPLOADED';
+```
+
+Backend:  
+Go to the backend folder, run npm install, then node server.js.
+
+Frontend:  
+Go to the frontend folder, run npm install, then npm start.
+
+## 5. Technical Trade-offs & Future Improvements
+Current Hash:  
+The handshake hash is based on file name, size, and date for performance. In production, a partial content hash would improve security.
+
+Future Enhancement:  
+A manual Pause button could be added, although automatic resume already handles refreshes and connection drops effectively.
