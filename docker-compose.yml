@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # Database Service (The "Source of Truth")
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: chunked_uploads
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+  # Backend Service (The "Resilient" Receiver)
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASSWORD=123456
+      - DB_NAME=chunked_uploads
+    depends_on:
+      - db
+    restart: on-failure
+
+  # Frontend Service (The "Smart" Uploader)
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    environment:
+      - CHOKIDAR_USEPOLLING=true # Helps React reload in Docker
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
