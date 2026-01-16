@@ -61,35 +61,45 @@ export default function FileUploader() {
     }
   };
 
-  const uploadChunk = async (index) => {
-    const start = index * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, file.size);
-    const blob = file.slice(start, end); // Blob slicing [cite: 15]
+// Helper function to handle the delay outside of the loop scope
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-    const formData = new FormData();
-    formData.append('chunk', blob);
-    formData.append('uploadId', uploadId);
-    formData.append('chunkIndex', index);
+const uploadChunk = async (index) => {
+  const start = index * CHUNK_SIZE;
+  const end = Math.min(start + CHUNK_SIZE, file.size);
+  const blob = file.slice(start, end); // Chunking: Use Blob.slice() [cite: 15]
 
-    let attempt = 0;
-    while (attempt < MAX_RETRIES) {
-      try {
-        updateChunkStatus(index, 'uploading');
-        await axios.post(`${API_URL}/upload-chunk`, formData);
-        updateChunkStatus(index, 'success');
-        uploadedBytes.current += blob.size;
-        return true;
-      } catch (error) {
-        attempt++;
-        if (attempt === MAX_RETRIES) {
-          updateChunkStatus(index, 'error'); // Grid error state [cite: 23]
-          return false;
-        }
-        // Exponential backoff for network flapping [cite: 32, 47]
-        await new Promise(r => setTimeout(r, Math.pow(2, attempt) * 1000));
+  const formData = new FormData();
+  formData.append('chunk', blob);
+  formData.append('uploadId', uploadId);
+  formData.append('chunkIndex', index);
+
+  let attempt = 0;
+  let success = false;
+
+  while (attempt < MAX_RETRIES && !success) {
+    try {
+      updateChunkStatus(index, 'uploading');
+      await axios.post(`${API_URL}/upload-chunk`, formData);
+      
+      updateChunkStatus(index, 'success');
+      uploadedBytes.current += blob.size;
+      success = true; // Exit the loop on success
+    } catch (error) {
+      attempt++;
+      if (attempt < MAX_RETRIES) {
+        // Updated: Using the helper function to avoid no-loop-func warning
+        const backoffDelay = Math.pow(2, attempt) * 1000; // Exponential backoff 
+        updateChunkStatus(index, 'retrying');
+        await sleep(backoffDelay); 
+      } else {
+        updateChunkStatus(index, 'error'); // Final error state [cite: 23]
+        return false;
       }
     }
-  };
+  }
+  return success;
+};
 
   const updateChunkStatus = (index, status) => {
     setChunks(prev => {
@@ -155,7 +165,7 @@ export default function FileUploader() {
 
   return (
     <div className="container">
-      <h2 className="title">VizExperts ZIP Uploader</h2>
+      <h2 className="title">ZIP Uploader</h2>
       
       <input type="file" onChange={handleFileSelect} disabled={uploading} style={{marginBottom: '20px'}} />
       
@@ -177,9 +187,9 @@ export default function FileUploader() {
             </div>
           </div>
 
-          <p style={{fontSize: '14px', fontWeight: '600'}}>Status Grid (Showing first 100 chunks):</p>
+          <p style={{fontSize: '14px', fontWeight: '600'}}>Status Grid of Chunks Upload</p>
           <div className="grid">
-            {chunks.slice(0, 100).map((c, i) => (
+            {chunks.map((c, i) => (
               <div key={i} className={`chunk ${c.status}`} title={`Chunk ${i}: ${c.status}`}></div>
             ))}
           </div>
