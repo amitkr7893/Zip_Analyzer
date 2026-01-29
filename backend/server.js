@@ -11,16 +11,19 @@ const yauzl = require('yauzl');
 
 const app = express();
 const TEMP_DIR = '/data/temp';
+
+console.log("ZIP ANALYZER BACKEND LOADED");
+
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
 const upload = multer({ dest: TEMP_DIR });
 
 
-// app.use(cors());
 app.use(cors({
   origin: [
-    'https://zip-analyzer.vercel.app'
+    'https://zip-analyzer.vercel.app',
+    'http://localhost:3000'
   ],
   methods: ['GET', 'POST']
 }));
@@ -41,6 +44,11 @@ const UPLOAD_DIR = '/data/uploads';
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
+
+app.get("/health", (req, res) => {
+  res.json({ ok: true, service: "zip-analyzer-backend" });
+});
+
 
 // 1. Handshake with Resume Logic
 app.post('/handshake', async (req, res) => {
