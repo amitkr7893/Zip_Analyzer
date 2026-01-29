@@ -5,7 +5,7 @@ import './fileUploader.css';
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_CONCURRENT = 3; // Concurrency limit 
 const MAX_RETRIES = 3;
-const API_URL = 'http://localhost:5000';
+const API_URL = process.env.REACT_APP_API_URL;
 
 export default function FileUploader() {
   const [file, setFile] = useState(null);
@@ -26,6 +26,12 @@ export default function FileUploader() {
   const handleFileSelect = async (e) => {
     const selectedFile = e.target.files[0];
     if (!selectedFile) return;
+
+    if (!selectedFile.name.toLowerCase().endsWith('.zip')) {
+      setMessage('Only ZIP files are supported');
+      return;
+    }
+
     setFile(selectedFile);
     setMessage('Checking for existing upload...');
 
