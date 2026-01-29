@@ -1,4 +1,3 @@
-// backend/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -11,7 +10,6 @@ const yauzl = require('yauzl');
 
 
 const app = express();
-// const upload = multer({ dest: 'temp/' });
 const TEMP_DIR = '/data/temp';
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -29,15 +27,6 @@ app.use(cors({
 
 app.use(express.json());
 
-// const pool = mysql.createPool({
-//   host: 'localhost',
-//   user: 'root',
-//   password: '123456', 
-//   database: 'chunked_uploads',
-//   waitForConnections: true,
-//   connectionLimit: 50
-// });
-
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -48,7 +37,6 @@ const pool = mysql.createPool({
 });
 
 
-// const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const UPLOAD_DIR = '/data/uploads';
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
